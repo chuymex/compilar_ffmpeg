@@ -1,0 +1,33 @@
+# Ejemplo de canales UDP con configuración mixta
+# Formato de línea: UDP_URL | NOMBRE_CANAL | parámetros extra separados por coma
+#
+# Parámetros disponibles en la tercera columna:
+#   encoder=nvenc      -> NVIDIA GPU (por defecto, puede omitirse)
+#   encoder=qsv        -> Intel QSV (GPU Intel)
+#   encoder=vaapi      -> AMD/Intel VAAPI (GPU AMD o Intel compatible)
+#   encoder=cpu        -> Transcodificación por CPU (libx264)
+#   filtros=...        -> Filtros personalizados para ffmpeg (ejemplo: filtros="-vf yadif,scale=854:480")
+#   map=...            -> Mapeo de streams personalizado para ffmpeg (ejemplo: map="-map 0:v:0 -map 0:a:1")
+#
+# Ejemplo de comandos para usar en parámetros:
+#   filtros="-vf yadif,scale=1280:720"            # Desentrelazado y resize a 1280x720
+#   filtros="-vf crop=720:576:0:0"                # Recorte de video
+#   map="-map 0:v:0 -map 0:a:1"                  # Selecciona video principal y segundo audio
+#   map="-map 0:v -map 0:a:0"                    # Selecciona primer video y primer audio
+# Puedes combinar varios parámetros separados por coma.
+#
+# Ejemplo de canales:
+
+udp://239.1.1.1:1234 | canal_nvidia        | encoder=nvenc
+udp://239.1.1.2:1234 | canal_intel         | encoder=qsv
+udp://239.1.1.3:1234 | canal_amd           | encoder=vaapi
+udp://239.1.1.4:1234 | canal_cpu           | encoder=cpu
+
+# Ejemplo con audio español y mapeo personalizado
+udp://239.1.1.5:1234 | canal_spa           | encoder=nvenc, map="-map 0:v:0 -map 0:a:1"
+
+# Ejemplo con filtros personalizados (solo CPU)
+udp://239.1.1.6:1234 | canal_cpu_filtros   | encoder=cpu, filtros="-vf yadif,scale=854:480"
+
+# Ejemplo con crop (recorte) y audio mapeado
+udp://239.1.1.7:1234 | canal_crop_audio    | encoder=nvenc, filtros="-vf crop=720:576:0:0", map="-map 0:v:0 -map 0:a:2"
