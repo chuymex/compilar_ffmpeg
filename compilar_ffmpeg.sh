@@ -16,13 +16,14 @@
 
 ####################################################################################
 # [0] CONFIGURACIÓN GLOBAL Y PARÁMETROS PERSONALIZABLES                            #
+# - Define variables globales, rutas, listas de paquetes y colores para logs.
+# - Permite modificar fácilmente versión de driver, logs y dependencias FFmpeg.
 ####################################################################################
-LOG_FILE="/root/resultado_instalacion.txt"        # Archivo de log principal
-REBOOT_FLAG="/root/.gpu_script_rebooted.flag"     # Flag para saber si el sistema ya fue reiniciado por el script
-NVIDIA_EXPECTED="575.64.05"                       # Versión esperada del driver NVIDIA
-SVTAV1_FLAG="--enable-libsvtav1"                  # Flag para compilar FFmpeg con soporte AV1 por SVT-AV1
+LOG_FILE="/root/resultado_instalacion.txt"
+REBOOT_FLAG="/root/.gpu_script_rebooted.flag"
+NVIDIA_EXPECTED="575.64.05"
+SVTAV1_FLAG="--enable-libsvtav1"
 
-# Listas de dependencias para FFmpeg, drivers y utilidades de GPU
 DEPENDENCIES=(
   build-essential pkg-config git yasm cmake libx264-dev libx265-dev libnuma-dev libvpx-dev libopus-dev libfdk-aac-dev
   libass-dev libfreetype6-dev libvorbis-dev libmp3lame-dev libxcb-shm0-dev libxcb-xfixes0-dev libdrm-dev libva-dev
@@ -40,7 +41,6 @@ OPCIONALES=(
 INTEL_PKGS=(libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc intel-media-va-driver-non-free libmfx-gen1 libvpl2 libvpl-tools va-driver-all vainfo libze-dev intel-ocloc)
 UTILS_PKGS=(nvidia-cuda-toolkit nvtop mc net-tools intel-gpu-tools)
 
-# Colores para log en consola y archivo
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -53,8 +53,9 @@ OPCIONAL_FALTANTES=()
 
 ####################################################################################
 # [1] FUNCIONES DE LOG Y REINICIO                                                  #
+# - Define funciones para logging con colores y para reiniciar el sistema de forma segura.
+# - Redirige toda la salida a consola y archivo LOG.
 ####################################################################################
-# Redirige toda la salida a log y consola
 exec > >(tee -a "$LOG_FILE") 2>&1
 log_mod()   { echo -e "\n${BLUE}========== $1 ==========${NC}\n"; }
 log_ok()    { echo -e "${GREEN}✔ $1${NC}"; }
@@ -62,7 +63,6 @@ log_err()   { echo -e "${RED}✖ $1${NC}"; }
 log_warn()  { echo -e "${YELLOW}⚠ $1${NC}"; }
 log_info()  { echo -e "${CYAN}ℹ $1${NC}"; }
 
-# Reinicio con conteo regresivo, se usa para aplicar cambios críticos a kernel/drivers
 countdown_and_reboot() {
   echo ""
   echo -e "${YELLOW}$1${NC}"
@@ -78,8 +78,10 @@ countdown_and_reboot() {
 
 ####################################################################################
 # [2] DESINSTALACIÓN Y BLOQUEO DE NOUVEAU (DRIVER ABIERTO NVIDIA)                  #
+# - Detecta si el driver abierto Nouveau está cargado.
+# - Si existe, lo desinstala y lo bloquea para prevenir conflictos con NVIDIA propietario.
+# - Fuerza reinicio tras la eliminación y actualización de initramfs.
 ####################################################################################
-# Elimina el driver abierto Nouveau si está presente, para evitar conflictos con NVIDIA propietario.
 log_mod "[INICIO - DESINSTALACIÓN Y DESACTIVACIÓN DE NOUVEAU]"
 if lsmod | grep -i nouveau &>/dev/null; then
   log_warn "[NVIDIA] Detectado el driver abierto Nouveau activo en el kernel."
@@ -96,8 +98,9 @@ fi
 
 ####################################################################################
 # [3] REMOVER HOLD DE PAQUETES (LIBERACIÓN PARA INSTALACIÓN/ACTUALIZACIÓN)         #
+# - Libera los paquetes NVIDIA y del kernel de posibles bloqueos (hold).
+# - Permite instalar y actualizar drivers/headers sin restricciones previas.
 ####################################################################################
-# Libera los paquetes NVIDIA y kernel de posibles bloqueos previos.
 log_mod "[REMOVIENDO HOLD DE PAQUETES NVIDIA Y KERNEL]"
 if lspci | grep -i nvidia &>/dev/null; then
   for pkg in $(dpkg -l | grep nvidia | awk '{print $2}'); do
@@ -111,8 +114,8 @@ sudo apt-mark unhold "$KERNEL_HDR" && log_warn "Unhold aplicado a headers: $KERN
 
 ####################################################################################
 # [4] DETECCIÓN DE GPU (NVIDIA / INTEL)                                            #
+# - Detecta automáticamente la presencia de GPU NVIDIA e Intel para instalar solo lo necesario.
 ####################################################################################
-# Detecta la presencia de GPU NVIDIA e Intel, para instalar lo necesario.
 log_mod "[DETECCIÓN DE GPU]"
 HAS_NVIDIA=false
 HAS_INTEL=false
@@ -121,8 +124,10 @@ if lspci | grep -i 'intel' | grep -i 'graphics' &>/dev/null || vainfo | grep -i 
 
 ####################################################################################
 # [5] INSTALACIÓN DE DEPENDENCIAS FFmpeg Y HW                                      #
+# - Instala todas las dependencias críticas y opcionales para FFmpeg y GPU.
+# - Actualiza paquetes si existe una versión más reciente.
+# - Si algún paquete crítico falla, marca el proceso como fallido.
 ####################################################################################
-# Instala dependencias críticas y opcionales para FFmpeg y procesamiento HW.
 log_mod "[INSTALACION DE DEPENDENCIAS FFmpeg y HW]"
 for pkg in "${DEPENDENCIES[@]}"; do
   INSTALLED_VER=$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null)
@@ -156,8 +161,9 @@ done
 
 ####################################################################################
 # [6] VERIFICACIÓN DE SVT-AV1 (AV1 HW PARA FFmpeg)                                 #
+# - Verifica si SVT-AV1 está instalado y disponible para FFmpeg.
+# - Si no está, desactiva el flag para evitar errores de compilación.
 ####################################################################################
-# Verifica si SVT-AV1 está disponible para soporte AV1 HW en FFmpeg.
 log_mod "[VERIFICACION LIBSVTAV1 SOLO POR PAQUETE DE SISTEMA]"
 SVTAV1_OK=false
 if pkg-config --exists SvtAv1Enc; then
@@ -171,8 +177,10 @@ fi
 
 ####################################################################################
 # [7] INSTALACIÓN DE DRIVERS GPU (NVIDIA / INTEL)                                  #
+# - Instala los drivers propietarios NVIDIA y/o Intel si es necesario.
+# - Verifica versión instalada y fuerza reinicio tras instalación.
+# - En el caso Intel, añade el PPA si no existe y actualiza los paquetes clave.
 ####################################################################################
-# Instala y verifica los drivers de GPU correspondientes.
 log_mod "[INSTALACIÓN DE DRIVERS GPU]"
 if $HAS_NVIDIA; then
   NVIDIA_INSTALLED=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)
@@ -230,8 +238,9 @@ fi
 
 ####################################################################################
 # [8] INSTALACIÓN DE UTILIDADES ADICIONALES DE GPU / DESARROLLO                    #
+# - Instala utilidades recomendadas para monitoreo y desarrollo de GPU.
+# - Actualiza si hay versiones más recientes.
 ####################################################################################
-# Instala herramientas de monitoreo y desarrollo recomendadas para GPUs.
 log_mod "[INSTALACIÓN DE PAQUETES Y UTILIDADES]"
 for pkg in "${UTILS_PKGS[@]}"; do
   INSTALLED_VER=$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null)
@@ -250,9 +259,28 @@ for pkg in "${UTILS_PKGS[@]}"; do
 done
 
 ####################################################################################
-# [9] COMPILACIÓN DE FFMPEG CON SOPORTE GPU                                        #
+# [9] VERIFICACIÓN E INSTALACIÓN DE NASM                                            #
+# - Verifica si NASM está instalado y en versión adecuada.
+# - Instala o actualiza NASM si es necesario, evitando fallos de compilación FFmpeg.
 ####################################################################################
-# Detecta flags, instala headers extra y recompila FFmpeg si es necesario (soporte NVIDIA/Intel).
+log_mod "[VERIFICACIÓN DE NASM]"
+if ! command -v nasm &>/dev/null; then
+  log_warn "[NASM] NASM no encontrado. Instalando..."
+  sudo apt-get install -y nasm
+elif ! nasm -v | grep -E 'version (2\.1[3-9]|2\.[2-9][0-9]|[3-9]\.)' &>/dev/null; then
+  log_warn "[NASM] Versión NASM muy antigua. Actualizando..."
+  sudo apt-get install -y nasm
+else
+  log_ok "[NASM] NASM detectado y en versión adecuada."
+fi
+
+####################################################################################
+# [10] COMPILACIÓN DE FFMPEG CON SOPORTE GPU                                        #
+# - Compila FFmpeg desde código fuente con los flags necesarios según hardware detectado.
+# - Instala headers extra para NVIDIA si corresponde.
+# - Elimina instalaciones previas para evitar conflictos.
+# - Muestra logs detallados y verifica éxito en cada paso.
+####################################################################################
 log_mod "[DETECCIÓN Y COMPILACIÓN FFmpeg]"
 FFMPEG_FLAGS="--enable-gpl --enable-nonfree --enable-libx264 --enable-libx265 --enable-libvpx --enable-libopus \
 --enable-libfdk_aac --enable-libass --enable-libfreetype --enable-libvorbis --enable-libmp3lame --enable-libaom $SVTAV1_FLAG \
@@ -304,8 +332,10 @@ if ! command -v ffmpeg &>/dev/null || $NEED_REBUILD; then
 
   log_warn "[FFMPEG] Configurando con flags: $FFMPEG_FLAGS"
   ./configure $FFMPEG_FLAGS | tee /root/ffmpeg_compile_detail.log
-  if [ $? -ne 0 ]; then
+  CONFIG_OK=$?
+  if [ $CONFIG_OK -ne 0 ]; then
     log_err "[FFMPEG] ERROR en la configuración. Revisa /root/ffmpeg_compile_detail.log para detalles."
+    tail -20 /root/ffmpeg_compile_detail.log
     SUCCESS=false
   else
     log_warn "[FFMPEG] Compilando..."
@@ -317,9 +347,10 @@ else
 fi
 
 ####################################################################################
-# [10] PRUEBAS DE ACELERACIÓN HW (VERIFICACIÓN FFmpeg GPU)                         #
+# [11] PRUEBAS DE ACELERACIÓN HW (VERIFICACIÓN FFmpeg GPU)                         #
+# - Ejecuta pruebas automáticas de transcodificación y decodificación FFmpeg según los encoders HW detectados.
+# - Guarda los resultados en logs separados para fácil diagnóstico.
 ####################################################################################
-# Realiza pruebas automáticas para verificar soporte hardware en FFmpeg.
 log_mod "[PRUEBAS DE ACELERACION HW]"
 if $SUCCESS; then
   log_ok "[FFMPEG] Verificando aceleración HW disponible..."
@@ -343,9 +374,10 @@ if $SUCCESS; then
 fi
 
 ####################################################################################
-# [11] PARCHEO NVIDIA-PATCH (ELIMINA LIMITES NVENC/NVIDIA)                         #
+# [12] PARCHEO NVIDIA-PATCH (ELIMINA LIMITES NVENC/NVIDIA)                         #
+# - Descarga y aplica el parche nvidia-patch si el driver NVIDIA esperado está activo y el sistema fue recién reiniciado.
+# - Elimina límites NVENC para streams concurrentes.
 ####################################################################################
-# Aplica el parche nvidia-patch para eliminar límites NVENC/NVIDIA si el driver está instalado y reiniciado.
 log_mod "[PARCHEANDO DRIVER NVIDIA (nvidia-patch)]"
 if $HAS_NVIDIA; then
   NVIDIA_INSTALLED=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)
@@ -371,9 +403,10 @@ if $HAS_NVIDIA; then
 fi
 
 ####################################################################################
-# [12] PROTECCIÓN CONTRA ACTUALIZACIÓN (APT HOLD) Y DESACTIVACIÓN DE AUTO-UPGRADE  #
+# [13] PROTECCIÓN CONTRA ACTUALIZACIÓN (APT HOLD) Y DESACTIVACIÓN DE AUTO-UPGRADE  #
+# - Protege paquetes críticos del kernel y drivers NVIDIA contra actualizaciones automáticas.
+# - Desinstala unattended-upgrades para evitar roturas del entorno por actualizaciones imprevistas.
 ####################################################################################
-# Protege paquetes críticos y desactiva actualizaciones automáticas.
 log_mod "[PROTEGIENDO DRIVERS/KERNEL CONTRA ACTUALIZACION Y DESACTIVANDO UNATTENDED-UPGRADES]"
 
 if $HAS_NVIDIA; then
@@ -412,9 +445,10 @@ if $HAS_NVIDIA && ! nvidia-smi &>/dev/null; then
 fi
 
 ####################################################################################
-# [13] RESUMEN FINAL Y LIMPIEZA                                                    #
+# [14] RESUMEN FINAL Y LIMPIEZA                                                    #
+# - Muestra resumen del proceso, resultados y recomendaciones finales.
+# - Limpia flags temporales.
 ####################################################################################
-# Resumen del proceso y limpieza de flags temporales.
 log_mod "[RESUMEN FINAL]"
 if $SUCCESS; then
   echo -e "${GREEN}✅ Todo el proceso fue exitoso. Drivers, dependencias, utilidades y FFmpeg instalados y verificados. Pruebas de aceleración completadas.${NC}"
@@ -448,31 +482,38 @@ if [ -f "$REBOOT_FLAG" ]; then
 fi
 
 ####################################################################################
-# [14] CLONAR REPOSITORIO udp_push CANALES UDP Y DAR PERMISOS                      #
+# [15] CLONAR REPOSITORIO udp_push CANALES UDP POR SSH Y DAR PERMISOS              #
+# - Clona el repositorio canales_udp por SSH para evitar pedir usuario/contraseña.
+# - Verifica existencia de clave SSH y aborta con instrucciones si no está.
+# - Otorga permisos 777 a la carpeta y su contenido.
 ####################################################################################
-# Esta sección crea la carpeta udp_push en /home si no existe, clona el repositorio canales_udp
-# y otorga permisos 777 tanto a la carpeta como a todo su contenido.
-# Si la carpeta ya existe, no realiza ninguna acción.
 UDP_DIR="/home/udp_push"
-UDP_REPO="https://github.com/chuymex/canales_udp.git"
+UDP_REPO="git@github.com:chuymex/canales_udp.git"
 
-log_mod "[CLONANDO REPOSITORIO CANALES UDP SI NO EXISTE]"
+log_mod "[CLONANDO REPOSITORIO CANALES UDP POR SSH SI NO EXISTE]"
 
-if [ ! -d "$UDP_DIR" ]; then
-  log_ok "Creando carpeta $UDP_DIR y clonando repositorio..."
-  mkdir -p "$UDP_DIR"
-  git clone "$UDP_REPO" "$UDP_DIR"
-  chmod -R 777 "$UDP_DIR"
-  log_ok "Permisos 777 otorgados a $UDP_DIR y todo su contenido."
+if [ ! -f "$HOME/.ssh/id_ed25519" ] && [ ! -f "$HOME/.ssh/id_rsa" ]; then
+  log_warn "No se encontró clave SSH en $HOME/.ssh/. Para evitar pedir user/pass, genera una con:"
+  echo "ssh-keygen -t ed25519 -C \"$(whoami)@$(hostname)\""
+  echo "Luego agrega la clave pública (~/.ssh/id_ed25519.pub) a tu cuenta de GitHub."
+  log_warn "Clonación abortada. Ejecuta el comando anterior y vuelve a correr el script."
 else
-  log_info "Carpeta $UDP_DIR ya existe. No se realiza clonación ni cambio de permisos."
+  if [ ! -d "$UDP_DIR" ]; then
+    log_ok "Creando carpeta $UDP_DIR y clonando repositorio por SSH..."
+    mkdir -p "$UDP_DIR"
+    git clone "$UDP_REPO" "$UDP_DIR"
+    chmod -R 777 "$UDP_DIR"
+    log_ok "Permisos 777 otorgados a $UDP_DIR y todo su contenido."
+  else
+    log_info "Carpeta $UDP_DIR ya existe. No se realiza clonación ni cambio de permisos."
+  fi
 fi
 
 ####################################################################################
-# [15] CREACIÓN DE SERVICIO SYSTEMD PARA CANALES UDP                               #
+# [16] CREACIÓN DE SERVICIO SYSTEMD PARA CANALES UDP                               #
+# - Crea el servicio systemd canales_udp si no existe o no apunta al script correcto.
+# - Permite ejecución automática de canales_udp.sh como root tras reinicio.
 ####################################################################################
-# Esta sección crea el servicio systemd canales_udp para ejecutar /home/udp_push/canales_udp.sh.
-# Si ya existe el servicio y apunta al script correcto, no hace nada.
 SERVICE_NAME="canales_udp"
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 SCRIPT_PATH="/home/udp_push/canales_udp.sh"
@@ -482,7 +523,6 @@ log_mod "[CREANDO SERVICIO SYSTEMD PARA CANALES UDP SI NO EXISTE]"
 if [ ! -f "$SCRIPT_PATH" ]; then
   log_warn "El archivo $SCRIPT_PATH no existe, no se puede crear el servicio systemd."
 else
-  # Verifica si el servicio existe y apunta al mismo script
   if [ -f "$SERVICE_PATH" ] && grep -q "$SCRIPT_PATH" "$SERVICE_PATH"; then
     log_info "El servicio $SERVICE_NAME ya existe y apunta a $SCRIPT_PATH. No se realiza ninguna acción."
   else
@@ -511,4 +551,5 @@ fi
 
 ####################################################################################
 # [FIN DEL SCRIPT]                                                                 #
+# - Finaliza el proceso y deja el entorno listo para producción.
 ####################################################################################
