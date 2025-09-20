@@ -1,81 +1,129 @@
-# canales_udp.sh
+# Script Master FFmpeg + GPU Drivers + Utilidades + Pruebas + Protección Actualizaciones
 
-## Descripción
+## Descripción General
 
-`canales_udp.sh` es un script Bash avanzado para la administración, supervisión y relanzamiento automático/manual de flujos de canales UDP utilizando FFmpeg. Está orientado a entornos de streaming profesional (TV/IPTV/OTT), soportando transcodificación acelerada por hardware (Intel QSV, Nvidia NVENC/CUDA), crop tipo cinema, mapeo de audio robusto, logging avanzado y lógica de supervisión individual por canal.
+Este script automatiza la **instalación, verificación y protección completa del entorno multimedia y de cómputo acelerado por GPU** en sistemas Linux (especialmente Ubuntu/Debian), integrando:
 
-El script permite:
-- Lanzar y monitorear múltiples canales desde un archivo `canales.txt`
-- Relanzamiento automático si un canal cae, con tolerancia configurable a fallos
-- Relanzamiento manual de canales específicos
-- Logging y diagnóstico previo por canal (RAM/disco/GPU/ffprobe)
-- Presets y parámetros personalizables por canal (resolución, encoder, audio, crop, etc.)
-
-## Requisitos
-
-- Bash 4+
-- FFmpeg (con soporte para QSV/NVENC/CUDA según hardware)
-- ffprobe
-- nvidia-smi (opcional, para tarjetas Nvidia)
-- netcat (opcional para diagnóstico)
-- Permisos de ejecución de scripts
-
-## Formato de archivo canales.txt
-
-Cada línea tiene la forma:
-```
-udp://fuente:puerto | nombredelcanal | encoder=...,nodeint=...,scale=...,audio=...,map=...,screen=...,force_mpeg2_qsv=...
-```
-Ejemplo:
-```
-udp://239.0.0.1:1234 | canal1 | encoder=cpu
-udp://239.0.0.2:1234 | canal2 | encoder=qsv,nodeint=0,scale=1920:1080
-udp://239.0.0.3:1234 | canal3 | encoder=nvenc,screen=1,audio=2
-```
-**Campos soportados:**
-- `encoder`: `cpu` (x264), `qsv` (Intel), `nvenc`/`cuda` (Nvidia)
-- `nodeint`: 1 (sin desentrelazado), 0 (con desentrelazado)
-- `scale`: resolución de salida (ej: 1280:720)
-- `audio`: `auto` (detecta español si existe), o índice (ej: 2)
-- `map`: mapeo manual de streams FFmpeg
-- `screen`: 1 activa crop tipo cinema
-- `force_mpeg2_qsv`: 1 fuerza decoder QSV para mpeg2
-
-## Uso
-
-1. Edita el archivo `canales.txt` con los canales deseados.
-2. Lanza el script:
-   ```bash
-   ./canales_udp.sh
-   ```
-   Esto lanzará todos los canales y activará el supervisor.
-
-3. Para relanzar manualmente un canal:
-   ```bash
-   ./canales_udp.sh relanzar nombredelcanal
-   ```
-
-## Parámetros Globales Editables
-
-Dentro del script puedes ajustar:
-- `MAX_FAILS`: número de caídas permitidas antes de pausar el canal
-- `FAIL_WINDOW`: ventana de tiempo para conteo de caídas (segundos)
-- `MAX_LOG_LINES` y `MAX_LOG_SIZE`: límites de logs
-
-## Ejemplo de flujo supervisado
-
-- Si un canal cae, el script intentará relanzarlo.
-- Si cae más de `MAX_FAILS` veces en `FAIL_WINDOW`, se pausa 10 minutos solo ese canal.
-- El resto de canales continúa funcionando y supervisándose normalmente.
-
-## Salidas
-
-- Logs individuales por canal en la carpeta `logs/`.
-- Estado del supervisor y acciones en los logs.
-- Comando ffmpeg generado y diagnóstico de entrada/salida por canal.
-
-## Contribuciones
-
-Pull requests y mejoras son bienvenidos. Por favor abre un Issue si encuentras algún bug o deseas sugerir una mejora.
+- Compilación personalizada de **FFmpeg** con soporte avanzado para NVIDIA e Intel (y AV1 si está disponible).
+- Instalación, verificación y protección de drivers de GPU.
+- Instalación y actualización de dependencias críticas y opcionales.
+- Pruebas automáticas para asegurarse de que la aceleración hardware esté disponible y funcional.
+- Parcheo de limitaciones de NVENC/NVIDIA (parche `nvidia-patch`).
+- Protección contra actualizaciones automáticas inesperadas (kernel, drivers, unattended-upgrades).
+- Instalación de utilidades de desarrollo y monitoreo de GPU.
+- Clonación y configuración de un repositorio propio de canales UDP, con servicio systemd para ejecución automática.
 
 ---
+
+## Funcionalidades Detalladas
+
+### 1. Desinstalación de Nouveau
+- Detecta si el driver abierto Nouveau (NVIDIA) está activo.
+- Si lo está, lo desinstala y bloquea su carga.
+- Aplica los cambios y fuerza un reinicio para evitar conflictos con el driver propietario NVIDIA.
+
+### 2. Liberación de Paquetes en Hold
+- Remueve cualquier bloqueo (hold) de drivers NVIDIA y kernel para permitir su actualización e instalación.
+
+### 3. Detección Automática de GPU
+- Detecta la presencia de GPU NVIDIA e Intel para instalar únicamente los componentes necesarios.
+
+### 4. Instalación y Actualización de Dependencias
+- Instala todas las dependencias necesarias para FFmpeg y procesamiento multimedia por hardware.
+- Actualiza paquetes si existe una versión más reciente.
+- Informa sobre los paquetes opcionales no encontrados.
+
+### 5. Verificación y Configuración de SVT-AV1
+- Verifica si el soporte AV1 hardware via SVT-AV1 está disponible.
+- Si no está, compila FFmpeg sin dicho soporte para evitar errores.
+
+### 6. Instalación y Verificación de Drivers GPU
+- Instala y verifica drivers propietarios NVIDIA e Intel.
+- Descarga automáticamente la versión especificada de NVIDIA.
+- Añade PPA oficial de Intel si es necesario.
+- Fuerza reinicio tras cambios críticos.
+
+### 7. Instalación de Utilidades de GPU/Desarrollo
+- Instala herramientas recomendadas para desarrollo y monitoreo de GPU (ej. `nvtop`, `intel-gpu-tools`, `nvidia-cuda-toolkit`).
+
+### 8. Verificación e Instalación de NASM
+- Instala o actualiza NASM para compilar FFmpeg con optimizaciones x86.
+
+### 9. Compilación Personalizada de FFmpeg
+- Descarga y compila FFmpeg desde código fuente con flags avanzados según hardware detectado.
+- Elimina instalaciones previas para evitar conflictos.
+- Integra headers extra para soporte NVIDIA.
+- Muestra logs detallados y verifica el éxito de cada paso.
+
+### 10. Pruebas Automáticas de Aceleración Hardware
+- Ejecuta pruebas automáticas de transcodificación y decodificación.
+- Verifica que los encoders/decoders hardware estén presentes y funcionales.
+- Guarda resultados en logs separados para diagnóstico.
+
+### 11. Parcheo de Límites NVENC/NVIDIA
+- Descarga y aplica el parche `nvidia-patch` si el driver NVIDIA está activo.
+- Elimina límites de streams concurrentes en NVENC.
+
+### 12. Protección Contra Actualizaciones Automáticas
+- Protege drivers y kernel críticos usando `apt-mark hold`.
+- Desinstala `unattended-upgrades` para evitar actualizaciones automáticas.
+
+### 13. Clonación y Configuración de Repositorio UDP
+- Clona el repositorio **canales_udp** por SSH (sin pedir usuario/contraseña).
+- Verifica la existencia de clave SSH y da instrucciones si no existe.
+- Otorga permisos 777 a la carpeta y su contenido para máxima compatibilidad.
+
+### 14. Creación de Servicio Systemd
+- Crea un servicio systemd para ejecutar automáticamente `canales_udp.sh` tras reinicio.
+- Verifica existencia y consistencia del servicio antes de crear o modificar.
+
+### 15. Resumen Final y Limpieza
+- Muestra un resumen de la instalación, pruebas e incidencias.
+- Limpia flags temporales y deja el sistema listo para uso productivo.
+
+---
+
+## Requisitos Previos
+
+- **Distribución Linux** basada en Debian/Ubuntu.
+- Acceso `root` o permisos sudo.
+- Conexión a internet para descargar repositorios y paquetes.
+- Clave SSH configurada y agregada a tu cuenta de GitHub para clonar el repositorio privado por SSH.
+
+## Ejecución
+
+1. Copia el script en `/root` (o tu directorio de administración preferido).
+2. Dale permisos de ejecución:
+    ```bash
+    chmod +x ffmpeg_gpu_master.sh
+    ```
+3. Ejecútalo como root:
+    ```bash
+    sudo ./ffmpeg_gpu_master.sh
+    ```
+
+## Notas Importantes
+
+- Si el script detecta la ausencia de clave SSH, te indicará cómo crearla y agregarla a GitHub antes de clonar el repositorio canales_udp.
+- Si el driver NVIDIA o kernel requiere reinicio, el script lo hará automáticamente y continuará tras el próximo arranque.
+- Todos los pasos y resultados se registran en `/root/resultado_instalacion.txt` y otros logs específicos para facilitar diagnóstico.
+- El script es modular y fácilmente extensible para agregar más utilidades o soporte para otras GPUs.
+
+## Logs Generados
+
+- **Log principal:** `/root/resultado_instalacion.txt`
+- **Resultados pruebas GPU/FFmpeg:** `/root/ffmpeg_hw_check.log`, `/root/ffmpeg_hw_test.log`
+- **Log de compilación FFmpeg:** `/root/ffmpeg_compile_detail.log`
+
+---
+
+## Contacto y Autor
+
+- Script desarrollado por **chuymex**
+- Puedes reportar incidencias o sugerencias en [GitHub](https://github.com/chuymex/canales_udp).
+
+---
+
+## Licencia
+
+Este script se distribuye bajo licencia MIT. Úsalo y modifícalo libremente bajo tu propio riesgo.
